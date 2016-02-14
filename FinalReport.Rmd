@@ -1,0 +1,131 @@
+---
+title: "PML"
+author: "YI"
+date: "2016”N2ŒŽ14“ú"
+output: html_document
+---
+
+##1. Objective  
+The purpose of this report is to show the analysis to predict  
+how people do excercise well. The data used was provided from  
+Human Activity Recognition project [Velloso, E. et. al. 2013].  
+Training data and testing data were provided. The final  
+objective is to predict the excericise performance of the  
+observations in the testing data.
+
+
+##2. Materials and methods  
+###2.1.Data
+Two datasets wete provided from the Human Activity Recognition  
+Project. The first one is training dataset which contains  
+19662 observations with 159 variables, and the second one is  
+testing dataset which contains 20 obseravations with 159  
+variables. These datasets were imported as follows.
+  
+```{r}
+####Data import
+  training      <- read.csv("pml-training.csv", header = TRUE)
+  predicting    <- read.csv("pml-testing.csv", header = TRUE)
+```  
+  
+The training data were preprocessed to omit unnecessary  
+variables such as those with many missing values, those with  
+near zero variance. 102 variables were omitted by this process.  
+Other processing such as PCA were not conducted as in the  
+training dataset observations were much larger than the variables  
+after the omittion. The codes used for this process is as follows.  
+  
+```{r}
+####remove near zero variance  
+  library(caret); library(kernlab);  
+  nzv <- nearZeroVar(training)  
+  filteredtraining <- training[,-nzv]  
+
+####remove columns where large proportion of NA  
+  cleanedtraining <- filteredtraining  
+  nacolumn             <- data.frame((colSums(is.na(cleanedtraining))  
+                                      > nrow(cleanedtraining) * 0.5))  
+  colnames(nacolumn)   <- c("na")  
+  nacolumn$ID          <- 1:99  
+  nacollist            <- subset(nacolumn, na==TRUE, c(ID))  
+  cleanedtraining      <- cleanedtraining[,-nacollist$ID]  
+  cleanedtraining      <- cleanedtraining[,-4]
+```
+  
+###2.2. Cross Validation  
+In this analysis, 2-fold cross validation (equivalent to hold-up  
+validation) was used for cross validation. Therefore, training  
+data were divided into 2 datasets (training2 and testing2) to  
+avoid over-fitting and out of samples error. The code is as follows.  
+  
+```{r}
+####Create two datasets
+  
+  inTrain    <- createDataPartition(y=cleanedtraining$classe, p=0.7, list = FALSE)
+  training2  <- cleanedtraining[inTrain,]
+  testing2   <- cleanedtraining[-inTrain,]
+```
+
+###2.3. Model building  
+To explore the best predictive model, several machine learning  
+algorithms were applied. As the outcome variables were categorical  
+with five categories, The applied algorithms were decision tree,  
+bagging, boosting, and random forest.  
+Once model was built on training2 dataset, the model was fitted to  
+testing2 dataset to calculate accuracy of the model. The accuracy  
+calculated for each model was used to decide which model was better.  
+the code is as follows.
+
+```{r}
+####DecisionTree  
+  TreeFit     <- train(classe ~., method="rpart", data=training2)  
+  DT          <- table(predict(TreeFit, newdata=testing2), testing2$classe)  
+  DT_Accuracy <- sum(diag(DT))/sum(DT)  
+    
+####Bagging  
+  predictors <- data.frame(training2[,-57])  
+  outcome    <- training2$classe  
+  treebag    <- bag(predictors,outcome, B =10, 
+                      bagControl = bagControl(fit = ctreeBag$fit,
+                                              predict = ctreeBag$pred,
+                                              aggregate = ctreeBag$aggregate))  
+  treebagp     <- predict(treebag, testing2[,-57], type="class")  
+  Bagging      <- table(testing2[,57], treebagp)  
+  Bag_Accuracy <- sum(diag(Bagging))/sum(Bagging)  
+    
+####Bagging  
+  library(adabag)  
+  boost          <- boosting(classe ~., data = training2, iter=20)  
+  boostp         <- predict(boost,testing2[,-57],type="vector")  
+  Boosting       <- table(boostp$class, testing2$classe)  
+  Boost_Accuracy <- sum(diag(Boosting))/sum(Boosting)  
+    
+  
+####Random forest  
+  library(randomForest)  
+  rfFit      <- randomForest(classe~., data = training2)  
+  RF         <- table(predict(rfFit, newdata=testing2[,-57]), testing2$classe)  
+  RF_Accuracy<- sum(diag(RF))/sum(RF)  
+    
+```
+
+###3.Results  
+Results are as follows. 
+```{r}  
+  results <- data.frame(round(DT_Accuracy,4),round(Bag_Accuracy,4),  
+                        round(Boost_Accuracy,4),round(RF_Accuracy,4))  
+  colnames(results) <-c("DecisionTree","Bagging","Boosting","RandomForest")  
+  results  
+    
+    DecisionTree Bagging Boosting RandomForest
+1       0.4969  0.9827   0.9998       0.9993  
+```
+
+Thus Boosting algorithm was used to predict the performance in the  
+test dataset.  
+```{r}  
+  testingp <- testing[,-nzv]  
+  testingp <- testingp[,-nacollist$ID]  
+  testingp <- testingp[,-4]  
+  predict(boost, newdata=testingp[,-57], type="vector")$class[1:20]  
+```  
